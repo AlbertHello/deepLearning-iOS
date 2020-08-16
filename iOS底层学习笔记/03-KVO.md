@@ -100,6 +100,7 @@
         * 内部会触发监听器（Oberser）的监听方法( observeValueForKeyPath:ofObject:change:context:）
 * 如何手动触发KVO？
     * 手动调用willChangeValueForKey:和didChangeValueForKey:，如下代码所示
+    
 ```
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event{
 //    [self.person1 setAge:21];//注释掉
