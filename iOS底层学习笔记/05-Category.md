@@ -45,7 +45,6 @@ Eat分类：
 	* map_images_nolock 解锁所有模块或镜像
 ![](resource/05/12.png)
 ![](resource/05/13.png)
-![](resource/05/13.png)
 
 * objc-runtime-new.mm
 	* _read_images
@@ -174,4 +173,5 @@ void attachLists(List* const * addedLists, uint32_t addedCount) {
 * 原理如下：
     * 程序运行时通过Runtime加载某个类的所有Category数据
     * 把所有Category的方法、属性、协议数据，合并到一个大数组中，后参与编译的Category数据，会在数组的前面。
-    * 将合并后的分类数据（方法、属性、协议），插入到类原来数据的前面。
+    * 将合并后的分类数据（方法、属性、协议），插入到类原来数据的前面。
+ 
