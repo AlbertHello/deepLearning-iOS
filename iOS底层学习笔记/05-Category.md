@@ -35,11 +35,143 @@ Eat分类：
 * 如果分类中实现了本类中的一个方法，在调用时是什么现象？
 ![](resource/05/11.png)
 
-**原因：** 通过结构看到值打印了分类test里面的实现，而分类Eat和本来里面的实现没有打印。只打印分类Test的实现不打印分类Eat的实现，是因为编译顺序的问题，分类Test在分类Eat之后编译，最终运行时Test的方法列表在一个大数组前面；不打印本来是因为，本类的方法在运行时就被安排到了方法大数组的最后面。只要找到一个对应的方法名，即调用。
-* 原理如下：
-    * 程序运行时通过Runtime加载某个类的所有Category数据
-    * 把所有Category的方法、属性、协议数据，合并到一个大数组中，后参与编译的Category数据，会在数组的前面。
-    * 将合并后的分类数据（方法、属性、协议），插入到类原来数据的前面。
+**原因：** 通过结构看到值打印了分类test里面的实现，而分类Eat和本来里面的实现没有打印。只打印分类Test的实现不打印分类Eat的实现，是因为编译顺序的问题，分类Test在分类Eat之后编译，最终运行时Test的方法列表在一个大数组前面；不打印本类是因为本类的方法在运行时就被安排到了方法大数组的最后面。只要找到一个对应的方法名，即调用。
 
 #### 源码分析分类数据加载过程
 
+* objc-os.mm 这是运行时的入口
+	* _objc_init 运行时初始化
+	* map_images 所有模块或镜像
+	* map_images_nolock 解锁所有模块或镜像
+![](resource/05/12.png)
+![](resource/05/13.png)
+![](resource/05/13.png)
+
+* objc-runtime-new.mm
+	* _read_images
+	* remethodizeClass
+	* attachCategories
+	* attachLists
+	* realloc、memmove、 memcpy
+![](resource/05/14.png)
+![](resource/05/15.png)
+![](resource/05/16.png)
+![](resource/05/17.png)
+
+```
+//cls  : 类
+//cats : 该类对应的所有的分类，是个分类列表
+static void attachCategories(Class cls, category_list *cats, bool flush_caches){
+    if (!cats) return;
+    if (PrintReplacedMethods) printReplacements(cls, cats);
+    bool isMeta = cls->isMetaClass();
+    // fixme rearrange to remove these intermediate allocations
+    // 方法列表 二维数组 [[method_t, method_t], [method_t, method_t]]
+    method_list_t **mlists = (method_list_t **)
+        malloc(cats->count * sizeof(*mlists));
+    // 属性列表
+    property_list_t **proplists = (property_list_t **)
+        malloc(cats->count * sizeof(*proplists));
+    // 协议列表
+    protocol_list_t **protolists = (protocol_list_t **)
+        malloc(cats->count * sizeof(*protolists));
+
+    // Count backwards through cats to get newest categories first
+    int mcount = 0;
+    int propcount = 0;
+    int protocount = 0;
+    int i = cats->count;
+    bool fromBundle = NO;
+    while (i--) { // i-- 从后向前遍历
+        auto& entry = cats->list[i];// 取出分类
+
+        //取出分类方法列表
+        method_list_t *mlist = entry.cat->methodsForMeta(isMeta);
+        if (mlist) {
+            //把该分类的方法列表放入前面定义的大数组mlists中。
+            //mcount++ 是从0开始
+            mlists[mcount++] = mlist;
+            fromBundle |= entry.hi->isBundle();
+        }
+        property_list_t *proplist = 
+            entry.cat->propertiesForMeta(isMeta, entry.hi);
+        if (proplist) {
+            proplists[propcount++] = proplist;
+        }
+        protocol_list_t *protolist = entry.cat->protocols;
+        if (protolist) {
+            protolists[protocount++] = protolist;
+        }
+    }
+    // rw 是objc_class结构体中用来拿到类对象方法列表的一个数据结构
+    // 这是取出类对象中的数据
+    auto rw = cls->data();
+
+    prepareMethodLists(cls, mlists, mcount, NO, fromBundle);
+    //将所有分类的对象方法附加到类对象的方法列表中
+    rw->methods.attachLists(mlists, mcount);
+    free(mlists);
+    if (flush_caches  &&  mcount > 0) flushCaches(cls);
+    
+    ////将所有分类的属性方法附加到类对象的属性列表中
+    rw->properties.attachLists(proplists, propcount);
+    free(proplists);
+    
+    //将所有分类的协议附加到类对象的协议
+    rw->protocols.attachLists(protolists, protocount);
+    free(protolists);
+}
+```
+
+```
+void attachLists(List* const * addedLists, uint32_t addedCount) {
+        if (addedCount == 0) return;
+
+        if (hasArray()) {
+            // many lists -> many lists
+            uint32_t oldCount = array()->count;
+            //数量增加分类的数量
+            uint32_t newCount = oldCount + addedCount;
+            //realloc重新初始化内存大小newCount
+            setArray((array_t *)realloc(array(), array_t::byteSize(newCount)));
+            array()->count = newCount;
+            
+            //array()已经扩大内存了
+            //memmove是把array()->lists本类方法列表在大数组中往后移动addedCount个位置。
+            //addedCount就是本类拥有的分类个数，也就是本类所有分类的方法列表个数
+            memmove(array()->lists + addedCount, array()->lists, 
+                    oldCount * sizeof(array()->lists[0]));
+            //把分类的方法列表addedLists移动到array()->lists数组的最前面
+            //本类自己的方法列表放在了最后面
+            //所以假如本类和分类都含有同名的方法，在运行时遍历到一个大数组中的第一个分类方法列表时
+            //如果找到该方法就直接调用了。
+            //而分类间的同名方法调用顺序则就完全依赖分类在大数组中的前后顺序了
+            //分类的前后顺序也就是编译顺序，XCode能控制。工程 -> BUild Phases -> Compile Source
+            //最后编译的最终会放到大数组的最前面
+            memcpy(array()->lists, addedLists, 
+                   addedCount * sizeof(array()->lists[0]));
+        }
+        else if (!list  &&  addedCount == 1) {
+            // 0 lists -> 1 list
+            list = addedLists[0];
+        } 
+        else {
+            // 1 list -> many lists
+            List* oldList = list;
+            uint32_t oldCount = oldList ? 1 : 0;
+            uint32_t newCount = oldCount + addedCount;
+            setArray((array_t *)malloc(array_t::byteSize(newCount)));
+            array()->count = newCount;
+            if (oldList) array()->lists[addedCount] = oldList;
+            memcpy(array()->lists, addedLists, 
+                   addedCount * sizeof(array()->lists[0]));
+        }
+    }
+```
+形象些如下：
+![](resource/05/18.png)
+
+* 原理如下：
+    * 程序运行时通过Runtime加载某个类的所有Category数据
+    * 把所有Category的方法、属性、协议数据，合并到一个大数组中，后参与编译的Category数据，会在数组的前面。
+    * 将合并后的分类数据（方法、属性、协议），插入到类原来数据的前面。
