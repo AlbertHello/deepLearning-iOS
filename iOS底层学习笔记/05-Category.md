@@ -174,6 +174,14 @@ void attachLists(List* const * addedLists, uint32_t addedCount) {
     * 程序运行时通过Runtime加载某个类的所有Category数据
     * 把所有Category的方法、属性、协议数据，合并到一个大数组中，后参与编译的Category数据，会在数组的前面。
     * 将合并后的分类数据（方法、属性、协议），插入到类原来数据的前面。
+
+### Category和Extension
+* Category
+    * Category编译之后的底层结构是struct category_t，里面存储着分类的对象方法、类方法、属性、协议信息
+    * 在程序运行的时候，runtime会将Category的数据，合并到类信息中（类对象、元类对象中）
+*  Extension
+    * Extension在编译的时候，它的数据就已经包含在类信息中
+    * Category是在运行时，才会将数据合并到类信息中
     
 ### Load 方法    
 #### load方法调用顺序
@@ -200,3 +208,10 @@ void attachLists(List* const * addedLists, uint32_t addedCount) {
     * 而load方法调用机制不同：load方法在运行时加载所有类时，会直接拿到每个类中的load方法地址，直接调用执行，没有涉及到消息发送机制，也就不会按照isa机制来查找方法。
 
 #### load调用源码分析
+![](resource/05/20.png)
+
+![](resource/05/21.png)
+
+![](resource/05/22.png)
+
+![](resource/05/23.png)

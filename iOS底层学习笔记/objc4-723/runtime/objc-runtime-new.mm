@@ -2056,10 +2056,13 @@ load_images(const char *path __unused, const struct mach_header *mh)
     // Discover load methods
     {
         rwlock_writer_t lock2(runtimeLock);
+        //调用load方法钱的准备工作。。比如把所有类拍好顺序，放到一个数组中
+        //这里也决定了调用顺序
         prepare_load_methods((const headerType *)mh);
     }
 
     // Call +load methods (without runtimeLock - re-entrant)
+    // 调用load 方法
     call_load_methods();
 }
 
