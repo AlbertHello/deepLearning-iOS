@@ -208,10 +208,44 @@ void attachLists(List* const * addedLists, uint32_t addedCount) {
     * 而load方法调用机制不同：load方法在运行时加载所有类时，会直接拿到每个类中的load方法地址，直接调用执行，没有涉及到消息发送机制，也就不会按照isa机制来查找方法。
 
 #### load调用源码分析
+源码解读：
+* objc-os.mm
+    * _objc_init 运行时加载类、分类
+* objc-runtime-new.mm
+    * load_images
+    * prepare_load_methods 准备工作
+        * schedule_class_load 定制规划类的顺序问题
+        * objc-loadmethod.mm
+            * add_class_to_loadable_list 添加类到数组中
+            * add_category_to_loadable_list 添加分类到数组中
+    * objc-loadmethod.mm
+        * call_load_methods 依次调用数组中所有类的load方法
+            * call_class_loads 调用类的load方法
+            * call_category_loads  调用分类的load方法
+            * (*load_method)(cls, SEL_load) 函数指针直接调用方法
+             
+下面分部看：
+
+* _objc_init 运行时加载类、分类
 ![](resource/05/20.png)
-
+* load_images
+![](resource/05/27.png) 
+* prepare_load_methods 准备工作
+![](resource/05/28.png)
+    * schedule_class_load 定制规划类的顺序问题
+    ![](resource/05/26.png)
+    * add_class_to_loadable_list 添加类到数组中
+    ![](resource/05/24.png)
+    * add_category_to_loadable_list 添加分类到数组中
+    ![](resource/05/25.png) 
+* call_load_methods 依次调用数组中所有类的load方法
 ![](resource/05/21.png)
+    * call_class_loads 调用类的load方法
+    ![](resource/05/22.png)
+    * call_category_loads  调用分类的load方法
+    ![](resource/05/23.png)
+    * (*load_method)(cls, SEL_load) 函数指针直接调用方法
+    ![](resource/05/29.png)
+        
+        
 
-![](resource/05/22.png)
-
-![](resource/05/23.png)

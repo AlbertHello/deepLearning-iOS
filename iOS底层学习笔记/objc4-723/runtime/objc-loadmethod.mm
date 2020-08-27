@@ -80,10 +80,10 @@ void add_class_to_loadable_list(Class cls)
                               loadable_classes_allocated *
                               sizeof(struct loadable_class));
     }
-    
+    // loadable_classes下标从零开始，符合条件的类放入列表中
     loadable_classes[loadable_classes_used].cls = cls;
     loadable_classes[loadable_classes_used].method = method;
-    loadable_classes_used++;
+    loadable_classes_used++; // 从0开始累加
 }
 
 
@@ -116,10 +116,10 @@ void add_category_to_loadable_list(Category cat)
                               loadable_categories_allocated *
                               sizeof(struct loadable_category));
     }
-
+    // loadable_categories下标从零开始，符合条件的分类放入列表中
     loadable_categories[loadable_categories_used].cat = cat;
     loadable_categories[loadable_categories_used].method = method;
-    loadable_categories_used++;
+    loadable_categories_used++;//从0开始累加
 }
 
 

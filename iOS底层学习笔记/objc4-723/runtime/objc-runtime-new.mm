@@ -2720,8 +2720,10 @@ static void schedule_class_load(Class cls)
     if (cls->data()->flags & RW_LOADED) return;
 
     // Ensure superclass-first ordering
+    // 保证父类先排序。 递归调用
+    // 这就是当存在子类和父类时为什么先打印父类的load再打印子类的load的原因
     schedule_class_load(cls->superclass);
-
+    // 之后把类放入一个列表中
     add_class_to_loadable_list(cls);
     cls->setInfo(RW_LOADED); 
 }
@@ -2744,6 +2746,7 @@ void prepare_load_methods(const headerType *mhdr)
     classref_t *classlist = 
         _getObjc2NonlazyClassList(mhdr, &count);
     for (i = 0; i < count; i++) {
+        //定制、规划所有的类
         schedule_class_load(remapClass(classlist[i]));
     }
 
@@ -2754,6 +2757,7 @@ void prepare_load_methods(const headerType *mhdr)
         if (!cls) continue;  // category for ignored weak-linked class
         realizeClass(cls);
         assert(cls->ISA()->isRealized());
+        //添加分类
         add_category_to_loadable_list(cat);
     }
 }
