@@ -247,5 +247,58 @@ void attachLists(List* const * addedLists, uint32_t addedCount) {
     * (*load_method)(cls, SEL_load) 函数指针直接调用方法
     ![](resource/05/29.png)
         
-        
+### initialize 方法          
+#### 结论
+* +initialize方法会在类第一次接收到消息时调用。
+* 调用顺序
+    * 在父类和子类都实现了initialize的前提下，先调用父类的+initialize，再调用子类的+initialize，否则调用了你也不知道。
+    * 先初始化父类，再初始化子类，每个类只会初始化1次
 
+* **+initialize方法会在类第一次接收到消息时调用**
+![](resource/05/30.png)
+* **先初始化父类，再初始化子类，每个类只会初始化1次**
+![](resource/05/31.png)
+
+#### initialize源码分析
+**分析** 因为initialize方法的调用是消息发送机制，而是仅仅在一次接收消息时调用。那么消息机制，就会涉及到根据ISA找到类对象或元类对象，再接着找方法(也就是第一次接收的消息的那个方法，比如alloc)。那么重点就是找方法：class_getInstanceMethod
+* objc-runtime-new.mm
+    * class_getInstanceMethod 找方法
+    * lookUpImpOrNil 查询方法列表
+    * lookUpImpOrForward 实际查询函数地址
+    * objc-initialize.mm 
+        * _class_initialize 调用的初始化方法
+        * callinitialize 实际调用
+        * objc_msgSend(cls, SEL_initialize) 最终还是objc_msgSend
+* objc-msg-arm64.s // arm64汇编文件
+    * objc_msgSend // 我的乖乖，原来大名鼎鼎的objc_msgSend()方法是由汇编实现的
+
+* **class_getInstanceMethod**
+![](resource/05/33.png)
+
+* **lookUpImpOrNil**
+![](resource/05/34.png)
+
+* **_class_initialize**
+![](resource/05/35.png)
+
+* **_class_initialize**
+![](resource/05/36.png)
+
+* **callinitialize**
+![](resource/05/37.png)
+
+* **callinitialize**
+![](resource/05/38.png)
+
+* **objc_msgSend**
+![](resource/05/32.png)
+
+**延伸** +initialize和+load的很大区别是，+initialize是通过objc_msgSend进行调用的，所以有以下特点：
+* 如果子类没有实现+initialize，会调用父类的+initialize（所以父类的+initialize可能会被调用多次）
+    * 比如，首先Person有一个分类，且本类和分类都实现了initialize方法
+    * Son和Teacher都是Person的子类，并且两个子类都没有实现initialize方法，也没有分类
+    * 那么Son第一次接收消息时，首先会检查父类Person是否已经初始化，如果没有则先调用一次父类的initialize方法，又因为Person和其分类都实现了，所有最终会调用Person分类中实现的initialize，此时打印一次。
+    * 父类调用完成，该调用Son自己的initialize，但Son没有实现，则会找到父类的该方法，进行调用。又打印一次。
+    * 接着Teacher首次接收到了消息，那么首先会检查父类Person是否已经初始化，很明显前面已经初始化过了，不再调用。紧接着调用Teacher的initialize，但Teacher也没实现，那么就会查找父类的该方法，然后又被调用一次。第三次打印。
+* 如果分类实现了+initialize，就覆盖类本身的+initialize调用
+    * 这种情况很好理解，这就是ISA的寻找方法的机制。分类和本类有同名方法，只调用分类的方法。

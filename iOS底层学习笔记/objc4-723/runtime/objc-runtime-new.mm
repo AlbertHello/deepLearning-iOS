@@ -4556,6 +4556,7 @@ Method class_getInstanceMethod(Class cls, SEL sel)
 #warning fixme build and search caches
         
     // Search method lists, try method resolver, etc.
+    // 查询方法列表
     lookUpImpOrNil(cls, sel, nil, 
                    NO/*initialize*/, NO/*cache*/, YES/*resolver*/);
 
@@ -4649,9 +4650,10 @@ IMP lookUpImpOrForward(Class cls, SEL sel, id inst,
         runtimeLock.unlockWrite();
         runtimeLock.read();
     }
-
+    // 条件： 需要初始化，并且该类没有初始化
     if (initialize  &&  !cls->isInitialized()) {
         runtimeLock.unlockRead();
+        // 调用类的初始化方法
         _class_initialize (_class_getNonMetaClass(cls, inst));
         runtimeLock.read();
         // If sel == initialize, _class_initialize will send +initialize and 
@@ -4746,9 +4748,11 @@ IMP lookUpImpOrForward(Class cls, SEL sel, id inst,
 * lookUpImpOrNil.
 * Like lookUpImpOrForward, but returns nil instead of _objc_msgForward_impcache
 **********************************************************************/
+// 查询imp
 IMP lookUpImpOrNil(Class cls, SEL sel, id inst, 
                    bool initialize, bool cache, bool resolver)
 {
+    //标准的IMP指针查询
     IMP imp = lookUpImpOrForward(cls, sel, inst, initialize, cache, resolver);
     if (imp == _objc_msgForward_impcache) return nil;
     else return imp;
