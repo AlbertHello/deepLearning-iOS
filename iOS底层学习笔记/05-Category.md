@@ -301,4 +301,77 @@ void attachLists(List* const * addedLists, uint32_t addedCount) {
     * 父类调用完成，该调用Son自己的initialize，但Son没有实现，则会找到父类的该方法，进行调用。又打印一次。
     * 接着Teacher首次接收到了消息，那么首先会检查父类Person是否已经初始化，很明显前面已经初始化过了，不再调用。紧接着调用Teacher的initialize，但Teacher也没实现，那么就会查找父类的该方法，然后又被调用一次。第三次打印。
 * 如果分类实现了+initialize，就覆盖类本身的+initialize调用
-    * 这种情况很好理解，这就是ISA的寻找方法的机制。分类和本类有同名方法，只调用分类的方法。
+    * 这种情况很好理解，这就是ISA的寻找方法的机制。分类和本类有同名方法，只调用分类的方法。
+### 分类添加成员变量
+* 默认情况下，因为分类底层结构的限制(没有ivars成员变量数组)，不能添加成员变量到分类中。但可以通过关联对象来间接实现。
+* 分类中直接写成员变量会报错
+* 分类中添加属性，系统默认只会生成setter和getter的声明，不会生成对应的实现和成员变量。
+* 关联对象并不是存储在被关联对象本身内存中
+* 关联对象存储在全局的统一的一个AssociationsManager中* 设置关联对象为nil，就相当于是移除关联对象
+
+#### setter实现
+* 添加关联对象
+
+```
+void objc_setAssociatedObject(id object, const void * key,id value, objc_AssociationPolicy policy)
+```
+![](resource/05/39.png)
+
+##### objc_AssociationPolicy 策略
+![](resource/05/41.png)
+
+##### key的常见用法
+* static void *MyKey = &MyKey;
+
+```
+objc_setAssociatedObject(obj, MyKey, value, OBJC_ASSOCIATION_RETAIN_NONATOMIC)objc_getAssociatedObject(obj, MyKey)
+```
+
+* static char MyKey;
+
+```
+objc_setAssociatedObject(obj, &MyKey, value, OBJC_ASSOCIATION_RETAIN_NONATOMIC)objc_getAssociatedObject(obj, &MyKey)
+```
+
+* 使用属性名作为key
+```
+objc_setAssociatedObject(obj, @"property", value, OBJC_ASSOCIATION_RETAIN_NONATOMIC);objc_getAssociatedObject(obj, @"property");
+```
+
+* 使用get方法的@selecor作为key
+
+```
+objc_setAssociatedObject(obj, @selector(getter), value, OBJC_ASSOCIATION_RETAIN_NONATOMIC)objc_getAssociatedObject(obj, @selector(getter))
+```
+
+**备注**
+* 前两个用法有瑕疵，因为是全局变量当多个实例都调用分类中的属性时数据就会错乱。
+* 后面两种是常用的，但最后一种更便利。
+#### getter实现
+* 获取关联对象
+
+```
+id objc_getAssociatedObject(id object, const void * key)
+```
+![](resource/05/40.png)
+
+#### 关联对象的原理
+* 实现关联对象技术的核心对象有
+    * AssociationsManager
+    * AssociationsHashMap
+    * ObjectAssociationMap
+    * ObjcAssociation
+
+* objc4源码解读：objc-references.mm
+![](resource/05/42.png)
+![](resource/05/43.png)
+![](resource/05/44.png) ![](resource/05/45.png)
+![](resource/05/46.png)
+![](resource/05/47.png)
+
+**备注**
+* 移除所有的关联对象
+
+```
+void objc_removeAssociatedObjects(id object)
+```
