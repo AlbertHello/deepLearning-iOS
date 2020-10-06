@@ -213,6 +213,29 @@ iOS 这里 bucket_t 的原理：
 * &上mask得到的值最大也不会超过mask
 ![](resource/08/32.png)
 
+下面看下实际的都没：
+* 只调用了init方法之后：
+![](resource/08/47.png)
+容量是mask+1=4，occupied=1，表明只缓存了一个。
+
+* 调用personTest 之后
+![](resource/08/48.png)
+
+我们恰巧能看到bucket数组的第一个元素是就是刚才调用过的，如果这为null，也是正常的，因为可能缓存的index位置可能不是0而已。
+
+* 当调用多个方法之后，打散列表：
+![](resource/08/49.png)
+
+可以看到有的为null有的是空，所以印证了上面所说的散列表的某些位置是空的。
+
+可以看下具体的通过key获取imp指针的实现:
+![](resource/08/50.png)
+![](resource/08/51.png)
+
+可以看到传入的sel会通过&上mask得到index，再通过判断根据index取出来的selector是否等于传入的selector,只有相等的时候才会返回对应的imp。 如果不满足则下一个循环，index-1了。
+
+
+
 
 
 
