@@ -97,6 +97,17 @@ CFRunloopModeRef底层结构如下：
 	* 01> 回到第02步
 	* 02> 退出Loop* 11、通知Observers：退出Loop
 
+#### runloop源码分析
+新建一demo，添加点击屏幕的方法，然后点击屏幕，打上断点，看下调用堆栈：
+![](resource/07/14.png)
+![](resource/07/15.png)
+
+![](resource/07/16.png)
+
+![](resource/07/17.png)
+
+![](resource/07/18.png)
+
 ![](resource/07/07.png)
 
 ### RunLoop在实际开中的应用
