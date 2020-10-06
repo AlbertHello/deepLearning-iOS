@@ -53,16 +53,16 @@
 前面已经温习了C语言的知识，那下面就是取值和赋值的实现：
 
 
-tall 属性
+* tall 属性
 ![](resource/08/06.png)
 
-rich 属性
+* rich 属性
 ![](resource/08/07.png)
 
-handsome属性
+* handsome属性
 ![](resource/08/08.png)
 
-其中的宏是：
+* 其中的宏是：
 ![](resource/08/09.png)
 
 * 左移几位就是乘上2的几次方
@@ -105,7 +105,18 @@ demo中的共用体也等价于下面的：
  
  至此位域大概就是这样了，下面仔细看下isa_t共用体
  
- ### isa_t共用体
+#### 位运算补充
+开发中我们经常看到有如下用法:
+![](resource/08/29.png)
+
+设置多个或运算后，内部怎么取值的？
+我们也自己定义：
+![](resource/08/24.png)
+
+传入值之后再&就能能得到它的值了。
+![](resource/08/23.png)
+ 
+### isa_t共用体详解
   ![](resource/08/18.png)
   
   * 前面说过了在64位之后，isa指针指向的类对象或元类对象的地址需要做一次位运算才能拿到相应的地址
@@ -124,5 +135,85 @@ demo中的共用体也等价于下面的：
 类对象或元类对象的地址最后三位永远都是0：
 ![](resource/08/22.png)
 
+#### isa_t成员变量详解
+下面挨个来看看isa_t每个成员的含义:
+* nonpointer
+	* 0，代表普通的指针，存储着Class、Meta-Class对象的内存地址
+	* 1，代表优化过，使用位域存储更多的信息
+* has_assoc
+	* 是否有设置过关联对象，如果没有，释放时会更快
+* has_cxx_dtor
+	* 是否有C++的析构函数（.cxx_destruct），如果没有，释放时会更快，看如下源码：
+![](resource/08/27.png)* shiftcls
+	* 存储着Class、Meta-Class对象的内存地址信息* magic
+	* 用于在调试时分辨对象是否未完成初始化* weakly_referenced
+	* 是否有被弱引用指向过，如果没有，释放时会更快
+* deallocating
+	* 对象是否正在释放* extra_rc
+	* 里面存储的值是引用计数器减1
+* has_sidetable_rc
+	* 引用计数器是否过大无法存储在isa中。
+	* 如果为1，那么引用计数会存储在一个叫SideTable的类的属性中
 
-  
+#### Class的结构
+![](resource/08/26.png)
+![](resource/08/28.png)
+![](resource/08/37.png)
+
+##### class_rw_t
+* class_rw_t里面的methods、properties、protocols是二维数组，是可读可写的，包含了类的初始内容、分类的内容
+![](resource/08/38.png)
+
+
+* method_t是对方法\函数的封装
+![](resource/08/39.png)
+
+* IMP代表函数的具体实现
+* SEL代表方法\函数名，一般叫做选择器，底层结构跟char *类似
+	* 可以通过@selector()和sel_registerName()获得
+	* 可以通过sel_getName()和NSStringFromSelector()转成字符串
+	* 不同类中相同名字的方法，所对应的方法选择器是相同的
+![](resource/08/30.png)
+
+* types包含了函数返回值、参数编码的字符串
+* iOS中提供了一个叫做@encode的指令，可以将具体的类型表示成字符串编码![](resource/08/42.png)
+![](resource/08/43.png)  ![](resource/08/44.png)
+
+
+![](resource/08/31.png)
+
+其中i代表返回值是int类型，@代表第一个参数是id类型，:代表第二个参数是sel类型，i代表第三个参数是int类型，f代表第四个参数是float类型。
+
+24代表参数总共占用24个字节，0代表从第0个字节开始是id类型的参数，8代表从第八个字节开始是sel类型的参数，16代表从第16个字节开始是int类型的参数，20代表从第20个字节开始是float类型的参数。
+
+
+##### class_ro_t
+* class_ro_t里面的baseMethodList、baseProtocols、ivars、baseProperties是一维数组，是只读的，包含了类的初始内容
+![](resource/08/45.png)
+
+##### cache_t 方法缓存
+* Class内部结构中有个方法缓存（cache_t），用**散列表（哈希表）**来缓存曾经调用过的方法，可以提高方法的查找速度
+![](resource/08/46.png)
+
+散列表原理：
+* 散列表也是哈希表，查找效率比数组高，是因为用空间换取了时间
+* 通过传入的一个key，经过某种算法得到一个索引index，该key对应的值组成结构体bucket_t就存在获取到的索引index下。
+* 当在某个index下存储时，可能其他的index并没有值，所以有部分空间是浪费的。
+* 当通过key查找时，也是通过key利用某个算法再次获取到index，然后根据index直接取值，速度自然比数组快。
+* 当两个或多个key通过某该算法得到了同一个index时，再回根据某个算法比如让得出的index-1或index+1或者其他什么算法，让index一个key一一对应就行。
+
+iOS 这里 bucket_t 的原理：
+* 当拿传入key时，会通过&上mask，得到index索引
+![](resource/08/33.png)
+* 当多个key通过&是哪个mask得到了同一个index时，iOS这里的处理方法是让index-1。
+![](resource/08/35.png)
+* 当散列表容量满了，会清空之前存储的，再扩容，因为mask变了，所以有必要清空之前的。
+![](resource/08/36.png)
+
+* &上mask得到的值最大也不会超过mask
+![](resource/08/32.png)
+
+
+
+
+
