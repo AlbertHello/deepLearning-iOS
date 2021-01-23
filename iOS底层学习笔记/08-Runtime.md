@@ -1,13 +1,13 @@
 2020年10月5日  书店 天气不错，晴冷
 
 ## runtime 
-
+首先介绍下C语言的有关位运算的知识
 ### 按位与 按位或 
 * 在arm64架构之前，isa就是一个普通的指针，存储着Class、Meta-Class对象的内存地址
 * 从arm64架构开始，对isa进行了优化，变成了一个共用体（union）结构，还使用**位域**来存储更多的信息
 ![](resource/08/01.png)
 
-先了解下C语言的基本知识
+C语言位运算
 * 与运算& 
 	* 两个同时为1，结果为1，否则为0
 	* 比如 0000 1000 & 0000 1001 = 0000 1000
@@ -19,11 +19,11 @@
 	* 按位取反，0->1,1->0
 	* ~0000 1000 = 1111 0111
 
-* &常用来取值
+* & 常用来取值
 	* 比如有二进制0001 1010，我想知道第四个二进制位是0还是1，那么我可以让这个数&上一个掩码0000 1000
 	* 那么0001 1010 & 0000 1000 = 0000 1000，如果得到的数第四位为1那么远来得那个数第四位也一定为1，如果为0那么原来的那个数的第四位也是0。
 
-* |常用来赋值
+* | 常用来赋值
 	* 比如有二进制数0001 1010，我想让他第一位变为1，那么可以让它|上一个掩码0000 0001
 	* 那么0001 1010 | 0000 0001 = 0001 1011 
 	* 这样既能保证不改变其他位的值，也能把第一位置位1.
@@ -129,7 +129,7 @@ demo中的共用体也等价于下面的：
  用计算器显示下二进制如下：
  ![](resource/08/20.png)
  
- 中间的33位都是1，最低位的三位都是0，那么通过元&运算得到的地址最后三位一定都是0，也就是我们得到以下结论：
+ 中间的33位都是1，最低位的三位都是0，那么通过 & 运算得到的地址最后三位一定都是0，也就是我们得到以下结论：
 ![](resource/08/21.png)
 
 类对象或元类对象的地址最后三位永远都是0：
@@ -200,7 +200,20 @@ demo中的共用体也等价于下面的：
 * 通过传入的一个key，经过某种算法得到一个索引index，该key对应的值组成结构体bucket_t就存在获取到的索引index下。
 * 当在某个index下存储时，可能其他的index并没有值，所以有部分空间是浪费的。
 * 当通过key查找时，也是通过key利用某个算法再次获取到index，然后根据index直接取值，速度自然比数组快。
-* 当两个或多个key通过某该算法得到了同一个index时，再回根据某个算法比如让得出的index-1或index+1或者其他什么算法，让index一个key一一对应就行。
+* 当两个或多个key通过某该算法得到了同一个index时，也就是产生了哈希碰撞，再会根据某个算法比如让得出的index-1或index+1或者其他什么算法，让index一个key一一对应就行。
+
+**注意：**
+* 实际上哈希冲突的解决办法一般有开放定址、再哈希、链地址等
+* 开放定址：
+    * 按照一定规则向其他地址探测，直到遇到空桶
+* 再哈希：
+    * 设计多个哈希函数
+* 链地址：
+    * 比如通过链表把同一index下的元素串起来。比如Java JDK1.8中就使用单链表和红黑树解决哈希冲突
+
+![](resource/08/52.png)
+
+---
 
 iOS 这里 bucket_t 的原理：
 * 当拿传入key时，会通过&上mask，得到index索引
@@ -235,6 +248,137 @@ iOS 这里 bucket_t 的原理：
 可以看到传入的sel会通过&上mask得到index，再通过判断根据index取出来的selector是否等于传入的selector,只有相等的时候才会返回对应的imp。 如果不满足则下一个循环，index-1了。
 
 
+### 消息发送
+详细看下消息发送的执行流程：[obj instanceMethod] 大概转化成了如下形式：
+ objc_msgSend(obj,instanceMethod)，其中obj称为消息接收者，instanceMethod是函数地址IMP。
+* 1 首先如果接收者obj如果是nil，则消息发送就会停止，没有任何反应
+* 2 obj不为nil，则就会根据obj的isa找到obj的类对象，然后在cache中国查找方法
+* 3 cache找到了即调用，结束查找。
+* 4 cache找不到则会在class_rw_t中查找方法，找到了即调用，并将方法缓存到类对象的cache中
+* 5 class_rw_t中没有找到，则会在类对象中利用superClass指针找到父类
+* 6 然后在父类的cache中查找，找到了即调用，结束查找。
+* 7 否则在父类的class_rw_t中查找，找到了即调用，并将方法缓存到类对象的cache中。
+* 8 如果父类的class_rw_t中还还查找不到，那就重复第5步。
+* 9 如果父类到头儿了还没找到方法就回进入动态解析阶段
+
+如下图示：
+![](resource/08/53.png)
+
+### 动态解析
+消息发送阶段如果找不到方法，就回进入到动态解析阶段，看下源码先：
+![](resource/08/54.png)
+
+* 动态解析阶段有个if判断，第一个参数是应该系统传入的resolver，这个是YES。重点是第二个参数triedResolver，这个参数在本函数开头，定义为：`bool triedResolver = NO;`
+* 所以当第一次进入动态解析时，能进入到 if 执行代码。
+* 动态解析完后，triedResolver被设置为YES，所以对该方法的动态解析就执行一次。
+* 解析完后就回到函数开头处重新走消息发送的流程，查chche、class_rw_t等，找到就调用。找不到就进入下一阶段消息转发。
+
+那么动态解析上层应该这么做呢？
+* 首先，实现两个方法
+```
+// 处理类方法找不到
++ (BOOL)resolveClassMethod:(SEL)sel{
+    if (sel == @selector(testClassMethord)) {
+        
+        // 方案1 添加 C 函数
+        // 第一个参数是object_getClass(self)
+        // 第二个参数是就是传入的sel
+        // 第三个参数是将要动态添加的方法的IMP指针
+        // 第四个是将要动态添加的方法的参数类型、返回值类型等描述
+//        class_addMethod(object_getClass(self),
+//                        sel,
+//                        (IMP)c_other, // 如果是C函数，那么函数名就是函数地址了。
+//                        "v16@0:8");
+        
+        // 方案2 添加 OC 函数
+        // 第一个参数是object_getClass(self)
+        // 第二个参数是就是传入的sel
+        // 第三个参数是将要动态添加的方法的IMP指针
+        // 第四个是将要动态添加的方法的参数类型、返回值类型等描述
+        
+        Method method = class_getInstanceMethod(self, @selector(other));
+        IMP imp = method_getImplementation(method); // 获取到OC函数的函数地址
+
+        class_addMethod(object_getClass(self),
+                        sel,
+                        imp,
+                        method_getTypeEncoding(method));
+        return YES; // 返回YES代表有动态添加方法
+    }
+    return [super resolveClassMethod:sel];
+}
+```
+```
+// 处理实例方法找不到
++ (BOOL)resolveInstanceMethod:(SEL)sel{
+    if (sel == @selector(testInstanceMethord)) {
+        
+        // 方案1 添加 C 函数
+        // 第一个参数是 self 代表实例对象
+        // 第二个参数是就是传入的sel
+        // 第三个参数是将要动态添加的方法的IMP指针
+        // 第四个是将要动态添加的方法的参数类型、返回值类型等描述
+//        class_addMethod(self,
+//                        sel,
+//                        (IMP)c_other,
+//                        "v16@0:8");
+        
+        // 方案2 添加 OC 函数
+        // 第一个参数是 self 代表实例对象
+        // 第二个参数是就是传入的sel
+        // 第三个参数是将要动态添加的方法的IMP指针
+        // 第四个是将要动态添加的方法的参数类型、返回值类型等描述
+        
+        Method method = class_getInstanceMethod(self, @selector(other));
+        IMP imp = method_getImplementation(method); // 获取到OC函数的函数地址
+
+        class_addMethod(self,
+                        sel,
+                        imp,
+                        method_getTypeEncoding(method));
+        
+        return YES; // 返回YES代表有动态添加方法
+    }
+    return [super resolveInstanceMethod:sel];
+}
+```
+* 还有要动态添加的方法，也就是找不到某个方法时，临时让一个方法顶替的意思
+```
+// C 函数
+void c_other(id self, SEL _cmd){
+    NSLog(@"c_other - %@ - %@", self, NSStringFromSelector(_cmd));
+}
+// OC 函数
+- (void)other{
+    NSLog(@"%s", __func__);
+}
+```
+* `+resolveClassMethod` 和 `+resolveInstanceMethod` 分别是类方法找不到和实例方法找不到时被系统自动调用的方法
+* 通过method_getImplementation函数动态添加一个方法实现。
+* 动态添加的这个方法可以是C函数也可以是OC的方法。
+* 如此，便解决了方法找不到的问题。
+图示：
+![](resource/08/55.png)
+
+**另外：**
+* 上面代码中的`Method`其实在底层就是`struct method_t`
+* `Method`的定义是`typedef struct objc_method *Method;`
+* 而 `struct objc_method == struct method_t`
+
+```
+struct method_t {
+    SEL sel;
+    char *types;
+    IMP imp;
+};
+
+// 获取其他方法
+struct method_t *method = (struct method_t *)class_getInstanceMethod(self, @selector(other));
+// 动态添加test方法的实现
+class_addMethod(self, sel, method->imp, method->types);
+```
+### 消息转发
+通过上面的源码可以看到如果动态解析阶段还没解决，那么就进入到消息转发阶段了。
 
 
 
